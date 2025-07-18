@@ -19,53 +19,42 @@ function generateId() {
 }
 
 wss.on('connection', (ws) => {
-  // Assign a unique ID to the client
   const clientId = generateId();
   clients.set(clientId, ws);
-  ws.clientId = clientId; // Store ID on WebSocket object
-  ws.partnerId = null; // Initialize partner ID
+  ws.clientId = clientId;
+  ws.partnerId = null;
 
-  // Send welcome message with client ID
   ws.send(JSON.stringify({ type: 'welcome', id: clientId }));
   log(`Client ${clientId} connected`);
 
-  // Handle incoming messages
   ws.on('message', (message) => {
     try {
       const data = JSON.parse(message);
 
-      // Validate message structure
       if (!data.type) {
         throw new Error('Missing message type');
       }
 
-      // Handle waiting users
       if (data.type === 'waiting') {
         if (waitingUsers.length > 0) {
-          // Pair with another waiting user
           const partnerId = waitingUsers.shift();
           const partnerWs = clients.get(partnerId);
           if (partnerWs && partnerWs.readyState === WebSocket.OPEN) {
-            // Store partner IDs
             ws.partnerId = partnerId;
             partnerWs.partnerId = clientId;
-            // Notify both clients of pairing
             ws.send(JSON.stringify({ type: 'paired', partnerId }));
             partnerWs.send(JSON.stringify({ type: 'paired', partnerId: clientId }));
             log(`Paired ${clientId} with ${partnerId}`);
           } else {
-            // Partner disconnected, add to waiting list
             waitingUsers.push(clientId);
             log(`Client ${clientId} added to waiting list (partner ${partnerId} disconnected)`);
           }
         } else {
-          // No waiting users, add to queue
           waitingUsers.push(clientId);
           log(`Client ${clientId} added to waiting list`);
         }
       }
 
-      // Handle signaling messages (offer, answer, iceCandidate)
       if (data.type === 'offer' || data.type === 'answer' || data.type === 'iceCandidate') {
         if (!data.to || !data.payload) {
           throw new Error(`Invalid ${data.type} message: missing 'to' or 'payload'`);
@@ -84,7 +73,6 @@ wss.on('connection', (ws) => {
         }
       }
 
-      // Handle text messages
       if (data.type === 'message') {
         if (!data.to || !data.payload || !data.payload.text) {
           throw new Error("Invalid message: missing 'to' or 'payload.text'");
@@ -103,7 +91,6 @@ wss.on('connection', (ws) => {
         }
       }
 
-      // Handle end chat
       if (data.type === 'endChat') {
         if (!data.to) {
           throw new Error("Invalid endChat message: missing 'to'");
@@ -114,7 +101,6 @@ wss.on('connection', (ws) => {
           targetWs.send(JSON.stringify({ type: 'chatEnded', from: clientId }));
           log(`Client ${clientId} ended chat with ${targetId}`);
         }
-        // Remove from waiting list if present
         const index = waitingUsers.indexOf(clientId);
         if (index !== -1) {
           waitingUsers.splice(index, 1);
@@ -122,7 +108,6 @@ wss.on('connection', (ws) => {
         }
       }
 
-      // Handle ping/pong for connection health
       if (data.type === 'pong') {
         log(`Received pong from ${clientId}`);
       }
@@ -132,17 +117,14 @@ wss.on('connection', (ws) => {
     }
   });
 
-  // Handle client disconnection
   ws.on('close', () => {
     log(`Client ${clientId} disconnected`);
     clients.delete(clientId);
-    // Remove from waiting list
     const index = waitingUsers.indexOf(clientId);
     if (index !== -1) {
       waitingUsers.splice(index, 1);
       log(`Removed ${clientId} from waiting list`);
     }
-    // Notify partner if paired
     if (ws.partnerId) {
       const partnerWs = clients.get(ws.partnerId);
       if (partnerWs && partnerWs.readyState === WebSocket.OPEN) {
@@ -153,7 +135,6 @@ wss.on('connection', (ws) => {
     }
   });
 
-  // Periodically send ping to keep connection alive
   const pingInterval = setInterval(() => {
     if (ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'ping' }));
@@ -164,7 +145,6 @@ wss.on('connection', (ws) => {
   }, 30000);
 });
 
-// Periodically clean waiting queue
 setInterval(() => {
   const initialLength = waitingUsers.length;
   waitingUsers = waitingUsers.filter(id => {
